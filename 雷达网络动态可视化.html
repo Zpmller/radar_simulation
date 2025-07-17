@@ -82,24 +82,17 @@
             stroke-width: 1.5;
         }
         .radar {
-            fill: #4CAF50;
-            stroke: #2E7D32;
             stroke-width: 1.5;
         }
         .radar-beam {
-            fill: rgba(76, 175, 80, 0.3);
-            stroke: #4CAF50;
             stroke-width: 1.5;
             stroke-opacity: 0.8;
         }
         .radar-direction-marker {
-            fill: #4CAF50;
-            stroke: #2E7D32;
             stroke-width: 1;
         }
         .radar-range {
             fill: none;
-            stroke: #4CAF50;
             stroke-width: 1;
             stroke-dasharray: 5, 5;
         }
@@ -152,15 +145,11 @@
             <div class="legend">
                 <div class="legend-item">
                     <div class="legend-color" style="background-color: #4CAF50;"></div>
-                    <span>分布式小型雷达</span>
+                    <span>边缘雷达</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background-color: #2196F3;"></div>
-                    <span>集中式大型雷达</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: rgba(76, 175, 80, 0.3);"></div>
-                    <span>雷达扫描扇形区域(30°)</span>
+                    <span>中心雷达</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background-color: red;"></div>
@@ -277,7 +266,7 @@
             
         // 定义雷达站位置
         const radarStations = [
-            // 分布式小型雷达
+            // 边缘雷达
             { id: 1, x: 200, y: 200, radius: 8, range: 120, type: "distributed" },
             { id: 2, x: 700, y: 200, radius: 8, range: 120, type: "distributed" },
             { id: 3, x: 200, y: 450, radius: 8, range: 120, type: "distributed" },
@@ -289,10 +278,10 @@
             { id: 9, x: 150, y: 350, radius: 8, range: 120, type: "distributed" },
             { id: 10, x: 850, y: 350, radius: 8, range: 120, type: "distributed" },
             
-            // 集中式大型雷达
-            { id: 11, x: 500, y: 300, radius: 15, range: 250, type: "centralized" },
-            { id: 12, x: 300, y: 350, radius: 15, range: 250, type: "centralized" },
-            { id: 13, x: 700, y: 350, radius: 15, range: 250, type: "centralized" }
+            // 中心雷达
+            { id: 11, x: 500, y: 300, radius: 15, range: 120, type: "centralized" },
+            { id: 12, x: 300, y: 350, radius: 15, range: 120, type: "centralized" },
+            { id: 13, x: 700, y: 350, radius: 15, range: 120, type: "centralized" }
         ];
         
         // 定义雷达类型颜色
@@ -310,7 +299,7 @@
             .attr("cx", d => d.x)
             .attr("cy", d => d.y)
             .attr("r", d => d.range)
-            .attr("stroke", d => radarColors[d.type].stroke)
+            .attr("stroke", d => radarColors[d.type].fill)
             .attr("stroke-opacity", 0.6);
             
         // 添加雷达站
@@ -325,7 +314,7 @@
             .attr("fill", d => radarColors[d.type].fill)
             .attr("stroke", d => radarColors[d.type].stroke)
             .on("mouseover", function(event, d) {
-                showTooltip(event, `雷达站 ${d.id}<br>类型: ${d.type === "distributed" ? "分布式小型雷达" : "集中式大型雷达"}<br>位置: (${d.x}, ${d.y})<br>覆盖范围: ${d.range}米`);
+                showTooltip(event, `雷达站 ${d.id}<br>类型: ${d.type === "distributed" ? "边缘雷达" : "中心雷达"}<br>位置: (${d.x}, ${d.y})<br>覆盖范围: ${d.range}米`);
             })
             .on("mouseout", hideTooltip);
             
@@ -419,12 +408,11 @@
                 
                 // 创建雷达扫描扇形
                 const radarBeam = radarBeamGroup.append("path")
-                    .attr("class", "radar-beam");
+                    .attr("class", "radar-beam")
+                    .attr("fill", radarColors[radar.type].fill.replace(')', ', 0.3)').replace('rgb(', 'rgba('))
+                    .attr("stroke", radarColors[radar.type].stroke);
                 
-                // 创建方向标记
-                const directionMarker = radarBeamGroup.append("circle")
-                    .attr("class", "radar-direction-marker")
-                    .attr("r", 5);
+
                     
                 // 动画函数
                 function rotateRadar(angle) {
@@ -448,10 +436,7 @@
                         
                     radarBeam.attr("d", arc);
                     
-                    // 更新方向标记位置
-                    directionMarker
-                        .attr("cx", Math.cos(midAngle) * radar.range)
-                        .attr("cy", Math.sin(midAngle) * radar.range);
+
                     
                     // 检查是否有目标在扫描范围内
                     checkTargetsInBeam(radar, angle, angle + Math.PI / 6);
