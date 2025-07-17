@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小型雷达网络低空探测系统动态可视化</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .visualization-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+            gap: 20px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+            border-radius: 3px;
+        }
+        .info-panel {
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .target {
+            fill: red;
+            stroke: darkred;
+            stroke-width: 1.5;
+        }
+        .radar {
+            fill: #4CAF50;
+            stroke: #2E7D32;
+            stroke-width: 1.5;
+        }
+        .radar-beam {
+            fill: rgba(76, 175, 80, 0.3);
+            stroke: #4CAF50;
+            stroke-width: 1.5;
+            stroke-opacity: 0.8;
+        }
+        .radar-direction-marker {
+            fill: #4CAF50;
+            stroke: #2E7D32;
+            stroke-width: 1;
+        }
+        .radar-range {
+            fill: none;
+            stroke: #4CAF50;
+            stroke-width: 1;
+            stroke-dasharray: 5, 5;
+        }
+        .building {
+            fill: #90CAF9;
+            stroke: #1976D2;
+            stroke-width: 1;
+        }
+        .data-link {
+            stroke: #FF9800;
+            stroke-width: 2;
+            stroke-dasharray: 5, 3;
+        }
+        .detection {
+            fill: none;
+            stroke: red;
+            stroke-width: 2;
+            stroke-dasharray: 3, 3;
+        }
+        .command-center {
+            fill: #9C27B0;
+            stroke: #7B1FA2;
+            stroke-width: 1.5;
+        }
+        .tooltip {
+            position: absolute;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 14px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>小型雷达网络低空探测系统动态可视化</h1>
+        
+        <div class="visualization-container">
+            <div class="controls">
+                <button id="start-btn">开始模拟</button>
+                <button id="add-target-btn">添加目标</button>
+                <button id="reset-btn">重置</button>
+            </div>
+            
+            <svg id="visualization" width="1000" height="600"></svg>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #4CAF50;"></div>
+                    <span>分布式小型雷达</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #2196F3;"></div>
+                    <span>集中式大型雷达</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: rgba(76, 175, 80, 0.3);"></div>
+                    <span>雷达扫描扇形区域(30°)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: red;"></div>
+                    <span>低空目标</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #90CAF9;"></div>
+                    <span>建筑物</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #FF9800;"></div>
+                    <span>数据链路</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #9C27B0;"></div>
+                    <span>指挥中心</span>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <h3>系统状态</h3>
+                <div id="status-info">
+                    <p>系统就绪，等待开始模拟...</p>
+                </div>
+                <h3>探测信息</h3>
+                <div id="detection-info">
+                    <p>暂无探测目标</p>
+                </div>
+                <div id="all-targets-info">
+                    <h3>所有目标信息</h3>
+                    <div id="targets-list">
+                        <p>暂无目标</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化可视化区域
+        const svg = d3.select("#visualization");
+        const width = +svg.attr("width");
+        const height = +svg.attr("height");
+        
+        // 添加背景
+        svg.append("rect")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("fill", "#f5f5f5");
+            
+        // 添加城市轮廓
+        const cityPath = "M50,150 L950,150 L950,550 L50,550 Z";
+        svg.append("path")
+            .attr("d", cityPath)
+            .attr("fill", "#e0e0e0")
+            .attr("stroke", "#bdbdbd")
+            .attr("stroke-width", 2);
+            
+        // 添加道路
+        svg.append("line")
+            .attr("x1", 50)
+            .attr("y1", 350)
+            .attr("x2", 950)
+            .attr("y2", 350)
+            .attr("stroke", "#9e9e9e")
+            .attr("stroke-width", 10);
+            
+        svg.append("line")
+            .attr("x1", 500)
+            .attr("y1", 150)
+            .attr("x2", 500)
+            .attr("y2", 550)
+            .attr("stroke", "#9e9e9e")
+            .attr("stroke-width", 10);
+            
+        // 添加建筑物
+        const buildings = [
+            { x: 150, y: 250, width: 60, height: 100 },
+            { x: 250, y: 200, width: 80, height: 150 },
+            { x: 400, y: 220, width: 70, height: 130 },
+            { x: 600, y: 230, width: 90, height: 120 },
+            { x: 750, y: 250, width: 60, height: 100 },
+            { x: 200, y: 400, width: 100, height: 80 },
+            { x: 350, y: 420, width: 70, height: 130 },
+            { x: 650, y: 400, width: 120, height: 90 },
+            { x: 800, y: 420, width: 80, height: 70 }
+        ];
+        
+        svg.selectAll(".building")
+            .data(buildings)
+            .enter()
+            .append("rect")
+            .attr("class", "building")
+            .attr("x", d => d.x)
+            .attr("y", d => d.y)
+            .attr("width", d => d.width)
+            .attr("height", d => d.height);
+            
+        // 添加指挥中心
+        const commandCenter = { x: 500, y: 500, radius: 20 };
+        svg.append("circle")
+            .attr("class", "command-center")
+            .attr("cx", commandCenter.x)
+            .attr("cy", commandCenter.y)
+            .attr("r", commandCenter.radius);
+            
+        svg.append("text")
+            .attr("x", commandCenter.x)
+            .attr("y", commandCenter.y + 40)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#7B1FA2")
+            .attr("font-weight", "bold")
+            .text("指挥控制中心");
+            
+        // 定义雷达站位置
+        const radarStations = [
+            // 分布式小型雷达
+            { id: 1, x: 200, y: 200, radius: 8, range: 120, type: "distributed" },
+            { id: 2, x: 700, y: 200, radius: 8, range: 120, type: "distributed" },
+            { id: 3, x: 200, y: 450, radius: 8, range: 120, type: "distributed" },
+            { id: 4, x: 700, y: 450, radius: 8, range: 120, type: "distributed" },
+            { id: 5, x: 350, y: 180, radius: 8, range: 120, type: "distributed" },
+            { id: 6, x: 650, y: 180, radius: 8, range: 120, type: "distributed" },
+            { id: 7, x: 350, y: 520, radius: 8, range: 120, type: "distributed" },
+            { id: 8, x: 650, y: 520, radius: 8, range: 120, type: "distributed" },
+            { id: 9, x: 150, y: 350, radius: 8, range: 120, type: "distributed" },
+            { id: 10, x: 850, y: 350, radius: 8, range: 120, type: "distributed" },
+            
+            // 集中式大型雷达
+            { id: 11, x: 500, y: 300, radius: 15, range: 250, type: "centralized" },
+            { id: 12, x: 300, y: 350, radius: 15, range: 250, type: "centralized" },
+            { id: 13, x: 700, y: 350, radius: 15, range: 250, type: "centralized" }
+        ];
+        
+        // 定义雷达类型颜色
+        const radarColors = {
+            "distributed": { fill: "#4CAF50", stroke: "#2E7D32" },
+            "centralized": { fill: "#2196F3", stroke: "#0D47A1" }
+        };
+        
+        // 添加雷达覆盖范围
+        svg.selectAll(".radar-range")
+            .data(radarStations)
+            .enter()
+            .append("circle")
+            .attr("class", "radar-range")
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y)
+            .attr("r", d => d.range)
+            .attr("stroke", d => radarColors[d.type].stroke)
+            .attr("stroke-opacity", 0.6);
+            
+        // 添加雷达站
+        svg.selectAll(".radar")
+            .data(radarStations)
+            .enter()
+            .append("circle")
+            .attr("class", "radar")
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y)
+            .attr("r", d => d.radius)
+            .attr("fill", d => radarColors[d.type].fill)
+            .attr("stroke", d => radarColors[d.type].stroke)
+            .on("mouseover", function(event, d) {
+                showTooltip(event, `雷达站 ${d.id}<br>类型: ${d.type === "distributed" ? "分布式小型雷达" : "集中式大型雷达"}<br>位置: (${d.x}, ${d.y})<br>覆盖范围: ${d.range}米`);
+            })
+            .on("mouseout", hideTooltip);
+            
+        // 添加雷达站标签
+        svg.selectAll(".radar-label")
+            .data(radarStations)
+            .enter()
+            .append("text")
+            .attr("x", d => d.x)
+            .attr("y", d => d.y - 20)
+            .attr("text-anchor", "middle")
+            .attr("fill", d => radarColors[d.type].stroke)
+            .attr("font-weight", "bold")
+            .attr("font-size", d => d.type === "centralized" ? "12px" : "10px")
+            .text(d => `雷达${d.id}`);
+            
+        // 添加数据链路
+        const dataLinks = [
+            // 分布式雷达连接到最近的集中式雷达
+            { source: radarStations[0], target: radarStations[11] },
+            { source: radarStations[1], target: radarStations[11] },
+            { source: radarStations[2], target: radarStations[11] },
+            { source: radarStations[3], target: radarStations[11] },
+            { source: radarStations[4], target: radarStations[11] },
+            { source: radarStations[5], target: radarStations[11] },
+            { source: radarStations[6], target: radarStations[12] },
+            { source: radarStations[7], target: radarStations[12] },
+            { source: radarStations[8], target: radarStations[12] },
+            { source: radarStations[9], target: radarStations[12] },
+            
+            // 集中式雷达之间的连接
+            { source: radarStations[11], target: radarStations[12] },
+            { source: radarStations[11], target: radarStations[10] },
+            { source: radarStations[12], target: radarStations[10] },
+            
+            // 集中式雷达连接到指挥中心
+            { source: radarStations[10], target: commandCenter },
+            { source: radarStations[11], target: commandCenter },
+            { source: radarStations[12], target: commandCenter }
+        ];
+        
+        const linkGroup = svg.append("g").attr("class", "links");
+        
+        linkGroup.selectAll(".data-link")
+            .data(dataLinks)
+            .enter()
+            .append("line")
+            .attr("class", "data-link")
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+            
+        // 创建雷达扫描动画组
+        const radarBeamsContainer = svg.append("g").attr("class", "radar-beams-container");
+        
+        // 创建目标组
+        const targetGroup = svg.append("g").attr("class", "targets");
+        
+        // 创建探测线组
+        const detectionGroup = svg.append("g").attr("class", "detections");
+        
+        // 创建提示框
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+            
+        // 显示提示框函数
+        function showTooltip(event, text) {
+            tooltip.html(text)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 20) + "px")
+                .style("opacity", 1);
+        }
+        
+        // 隐藏提示框函数
+        function hideTooltip() {
+            tooltip.style("opacity", 0);
+        }
+        
+        // 雷达扫描动画
+        function startRadarAnimation() {
+            // 清除现有的扫描动画
+            radarBeamsContainer.selectAll("*").remove();
+            
+            radarStations.forEach(radar => {
+                // 创建雷达扫描扇形组
+                const radarBeamGroup = radarBeamsContainer.append("g")
+                    .attr("class", "radar-beam-group")
+                    .attr("transform", `translate(${radar.x}, ${radar.y})`);
+                
+                // 创建雷达扫描扇形
+                const radarBeam = radarBeamGroup.append("path")
+                    .attr("class", "radar-beam");
+                
+                // 创建方向标记
+                const directionMarker = radarBeamGroup.append("circle")
+                    .attr("class", "radar-direction-marker")
+                    .attr("r", 5);
+                    
+                // 动画函数
+                function rotateRadar(angle) {
+                    // 确保角度在0-2π范围内
+                    angle = angle % (2 * Math.PI);
+                    if (angle < 0) angle += 2 * Math.PI;
+                    
+                    // 将数学坐标系角度转换为D3.js角度系统（顺时针旋转90度）
+                    // 在D3.js中，0度是在正y轴（12点钟方向），而数学坐标系中0度是在正x轴
+                    const d3StartAngle = angle + Math.PI / 2;
+                    const d3EndAngle = d3StartAngle + Math.PI / 6; // 30度扇形
+                    const midAngle = (angle + angle + Math.PI / 6) / 2; // 扇形中心角度（保持在数学坐标系中）
+                    
+                    // 更新扫描扇形 - 使用D3.js的角度系统
+                    const arc = d3.arc()
+                        .innerRadius(0)
+                        .outerRadius(radar.range)
+                        .startAngle(d3StartAngle)
+                        .endAngle(d3EndAngle)
+                        .padAngle(0.01); // 添加一点间隔使扇形边缘更清晰
+                        
+                    radarBeam.attr("d", arc);
+                    
+                    // 更新方向标记位置
+                    directionMarker
+                        .attr("cx", Math.cos(midAngle) * radar.range)
+                        .attr("cy", Math.sin(midAngle) * radar.range);
+                    
+                    // 检查是否有目标在扫描范围内
+                    checkTargetsInBeam(radar, angle, angle + Math.PI / 6);
+                    
+                    // 继续旋转
+                    const newAngle = (angle + Math.PI / 60) % (2 * Math.PI); // 每次旋转3度
+                    setTimeout(() => rotateRadar(newAngle), 50);
+                }
+                
+                // 开始旋转，每个雷达站有不同的初始角度
+                rotateRadar(Math.random() * 2 * Math.PI);
+            });
+        }
+        
+        // 检查目标是否在雷达扫描范围内
+        function checkTargetsInBeam(radar, startAngle, endAngle) {
+            targetGroup.selectAll(".target").each(function(target) {
+                const dx = target.x - radar.x;
+                const dy = target.y - radar.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // 计算目标相对于雷达的角度，并确保在0-2π范围内
+                let angle = Math.atan2(dy, dx);
+                if (angle < 0) angle += 2 * Math.PI;
+                
+                // 处理扇形跨越2π边界的情况
+                let isInSector = false;
+                if (endAngle > 2 * Math.PI) {
+                    // 扇形跨越了2π边界
+                    isInSector = (angle >= startAngle && angle <= 2 * Math.PI) || 
+                                 (angle >= 0 && angle <= (endAngle % (2 * Math.PI)));
+                } else {
+                    // 扇形没有跨越2π边界
+                    isInSector = (angle >= startAngle && angle <= endAngle);
+                }
+                
+                // 检查目标是否在扫描扇形内
+                const inRange = distance <= radar.range;
+                
+                if (inRange && isInSector) {
+                    // 目标被探测到
+                    detectTarget(radar, target);
+                }
+            });
+        }
+        
+        // 目标被探测到的处理
+        function detectTarget(radar, target) {
+            // 清除旧的探测线
+            detectionGroup.selectAll(`.detection-${radar.id}-${target.id}`).remove();
+            
+            // 添加探测线
+            detectionGroup.append("line")
+                .attr("class", `detection detection-${radar.id}-${target.id}`)
+                .attr("x1", radar.x)
+                .attr("y1", radar.y)
+                .attr("x2", target.x)
+                .attr("y2", target.y)
+                .attr("opacity", 1)
+                .transition()
+                .duration(1000)
+                .attr("opacity", 0)
+                .remove();
+                
+            // 更新探测信息
+            updateDetectionInfo(radar, target);
+            
+            // 发送数据到指挥中心的动画
+            sendDataToCommandCenter(radar, target);
+        }
+        
+        // 发送数据到指挥中心的动画
+        function sendDataToCommandCenter(radar, target) {
+            // 创建一个数据包图标
+            const dataPacket = svg.append("circle")
+                .attr("cx", radar.x)
+                .attr("cy", radar.y)
+                .attr("r", 5)
+                .attr("fill", "#FF9800")
+                .attr("stroke", "#E65100")
+                .attr("stroke-width", 1);
+                
+            // 确定目标雷达是分布式还是集中式
+            let nextTarget;
+            if (radar.type === "distributed") {
+                // 如果是分布式雷达，找到最近的集中式雷达
+                const centralRadars = radarStations.filter(r => r.type === "centralized");
+                let minDist = Infinity;
+                let closestCentralRadar = null;
+                
+                centralRadars.forEach(cr => {
+                    const dist = Math.sqrt(Math.pow(radar.x - cr.x, 2) + Math.pow(radar.y - cr.y, 2));
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestCentralRadar = cr;
+                    }
+                });
+                
+                nextTarget = closestCentralRadar;
+            } else {
+                // 如果是集中式雷达，直接发送到指挥中心
+                nextTarget = commandCenter;
+            }
+            
+            // 发送数据包
+            dataPacket.transition()
+                .duration(1000)
+                .attr("cx", nextTarget.x)
+                .attr("cy", nextTarget.y)
+                .on("end", function() {
+                    // 如果下一个目标不是指挥中心，继续发送到指挥中心
+                    if (nextTarget !== commandCenter) {
+                        d3.select(this).transition()
+                            .duration(1000)
+                            .attr("cx", commandCenter.x)
+                            .attr("cy", commandCenter.y)
+                            .on("end", function() {
+                                // 动画结束后移除
+                                d3.select(this).remove();
+                            });
+                    } else {
+                        // 动画结束后移除
+                        d3.select(this).remove();
+                    }
+                });
+        }
+        
+        // 更新探测信息面板
+        function updateDetectionInfo(radar, target) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            
+            const infoPanel = d3.select("#detection-info");
+            infoPanel.html(`
+                <p><strong>时间:</strong> ${timeStr}</p>
+                <p><strong>探测雷达:</strong> 雷达${radar.id}</p>
+                <p><strong>目标ID:</strong> ${target.id}</p>
+                <p><strong>目标位置:</strong> (${Math.round(target.x)}, ${Math.round(target.y)})</p>
+                <p><strong>目标速度:</strong> ${Math.round(target.speed * 10) / 10} 单位/秒</p>
+                <p><strong>目标方向:</strong> ${Math.round(target.direction * 180 / Math.PI)}°</p>
+            `);
+            
+            // 更新所有目标信息
+            updateAllTargetsInfo();
+        }
+        
+        
+        // 更新系统状态信息
+        function updateStatusInfo(status) {
+            d3.select("#status-info").html(`<p>${status}</p>`);
+        }
+        
+        // 添加所有目标信息更新函数
+        function updateAllTargetsInfo() {
+            const targetsList = d3.select("#targets-list");
+            const targets = targetGroup.selectAll(".target").data();
+            
+            if (targets.length === 0) {
+                targetsList.html("<p>暂无目标</p>");
+                return;
+            }
+            
+            let html = "";
+            targets.forEach(target => {
+                html += `
+                    <div style="margin-bottom: 10px; padding: 5px; border-bottom: 1px solid #ddd;">
+                        <p><strong>目标ID:</strong> ${target.id}</p>
+                        <p><strong>位置:</strong> (${Math.round(target.x)}, ${Math.round(target.y)})</p>
+                        <p><strong>速度:</strong> ${Math.round(target.speed * 10) / 10} 单位/秒</p>
+                        <p><strong>方向:</strong> ${Math.round(target.direction * 180 / Math.PI)}°</p>
+                    </div>
+                `;
+            });
+            
+            targetsList.html(html);
+        }
+        
+        // 添加目标
+        let targetCounter = 0;
+        function addTarget() {
+            targetCounter++;
+            
+            // 随机位置（边缘）
+            let x, y;
+            const side = Math.floor(Math.random() * 4);
+            switch(side) {
+                case 0: // 上边
+                    x = 100 + Math.random() * 800;
+                    y = 150;
+                    break;
+                case 1: // 右边
+                    x = 950;
+                    y = 150 + Math.random() * 400;
+                    break;
+                case 2: // 下边
+                    x = 100 + Math.random() * 800;
+                    y = 550;
+                    break;
+                case 3: // 左边
+                    x = 50;
+                    y = 150 + Math.random() * 400;
+                    break;
+            }
+            
+            // 随机方向（指向区域中心附近）
+            const centerX = 500 + (Math.random() * 200 - 100);
+            const centerY = 350 + (Math.random() * 200 - 100);
+            const dx = centerX - x;
+            const dy = centerY - y;
+            const direction = Math.atan2(dy, dx);
+            
+            // 随机速度
+            const speed = 1 + Math.random() * 2;
+            
+            const target = {
+                id: targetCounter,
+                x: x,
+                y: y,
+                direction: direction,
+                speed: speed
+            };
+            
+            // 添加目标图标
+            const targetIcon = targetGroup.append("path")
+                .datum(target)
+                .attr("class", "target")
+                .attr("d", "M-5,-5 L5,5 M-5,5 L5,-5") // X形状
+                .attr("transform", `translate(${target.x}, ${target.y})`)
+                .on("mouseover", function(event, d) {
+                    showTooltip(event, `目标 ${d.id}<br>位置: (${Math.round(d.x)}, ${Math.round(d.y)})<br>速度: ${Math.round(d.speed * 10) / 10} 单位/秒`);
+                })
+                .on("mouseout", hideTooltip);
+                
+            // 添加目标移动动画
+            function moveTarget() {
+                // 更新位置
+                target.x += Math.cos(target.direction) * target.speed;
+                target.y += Math.sin(target.direction) * target.speed;
+                
+                // 检查是否超出边界
+                if (target.x < 0 || target.x > width || target.y < 0 || target.y > height) {
+                    // 移除目标
+                    targetIcon.remove();
+                    return;
+                }
+                
+                // 更新图标位置
+                targetIcon.attr("transform", `translate(${target.x}, ${target.y})`);
+                
+                // 继续移动
+                setTimeout(moveTarget, 50);
+            }
+            
+            // 开始移动
+            moveTarget();
+            
+            updateStatusInfo(`添加了新目标 (ID: ${target.id})，当前共有 ${targetGroup.selectAll(".target").size()} 个目标`);
+            
+            // 更新所有目标信息
+            updateAllTargetsInfo();
+        }
+        
+        // 重置系统
+        function resetSystem() {
+            // 清除所有目标
+            targetGroup.selectAll("*").remove();
+            
+            // 清除所有探测线
+            detectionGroup.selectAll("*").remove();
+            
+            // 重置计数器
+            targetCounter = 0;
+            
+            // 更新信息
+            updateStatusInfo("系统已重置，等待开始模拟...");
+            d3.select("#detection-info").html("<p>暂无探测目标</p>");
+            d3.select("#targets-list").html("<p>暂无目标</p>");
+        }
+        
+        // 绑定按钮事件
+        d3.select("#start-btn").on("click", function() {
+            startRadarAnimation();
+            updateStatusInfo("系统已启动，雷达开始扫描...");
+        });
+        
+        d3.select("#add-target-btn").on("click", function() {
+            addTarget();
+        });
+        
+        d3.select("#reset-btn").on("click", function() {
+            resetSystem();
+        });
+    </script>
+</body>
+</html>
